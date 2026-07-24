@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="doc_title">Conector TheHive — Ruvic</title>
+  <link rel="stylesheet" href="assets/ruvic.css">
+</head>
+<body>
+  <main class="ruvic-container">
+    <nav class="ruvic-toc" aria-label="Índice">
+      <h2 data-i18n="toc_title">Contenido</h2>
+      <ol>
+        <li><a href="#que-es" data-i18n="toc.que_es">¿Qué es y para qué sirve?</a></li>
+        <li><a href="#prerrequisitos" data-i18n="toc.prerrequisitos">Prerrequisitos</a></li>
+        <li><a href="#configuracion-fabricante" data-i18n="toc.configuracion_fabricante">Configuración en el fabricante</a></li>
+        <li><a href="#permisos" data-i18n="toc.permisos">Permisos requeridos</a></li>
+        <li><a href="#configuracion-ruvic" data-i18n="toc.configuracion_ruvic">Configuración en Ruvic</a></li>
+        <li><a href="#verificacion" data-i18n="toc.verificacion">Verificación</a></li>
+        <li><a href="#solucion-problemas" data-i18n="toc.solucion_problemas">Solución de problemas</a></li>
+        <li><a href="#faq-seguridad" data-i18n="toc.faq_seguridad">Preguntas frecuentes y notas de seguridad</a></li>
+      </ol>
+    </nav>
+
+    <h1 data-i18n="guide_title">Conector TheHive</h1>
+    <p class="guide-updated">{{ULTIMA_ACTUALIZACION}}</p>
+
+    <section>
+      <h2 id="que-es" data-i18n="section.que_es">¿Qué es y para qué sirve?</h2>
+      <p data-i18n="section.que_es.body">El conector TheHive permite que el agente de Ruvic gestione casos e incidentes de seguridad directamente en tu instancia de TheHive (API v1). A diferencia de los conectores de solo consulta, este conector escribe: crea casos, agrega tareas, actualiza estados y agrega observables (IOC) reales. Una vez configurado, puedes pedirle al agente cosas como:</p>
+      <ul>
+        <li data-i18n="section.que_es.example1">"Crea un caso de phishing reportado por finanzas y agrégale una tarea para analizar las cabeceras del correo."</li>
+        <li data-i18n="section.que_es.example2">"Marca el caso ~12345 como InProgress y agrega la IP 45.33.22.11 como observable."</li>
+        <li data-i18n="section.que_es.example3">"Actualiza a TruePositive el caso que abrimos ayer sobre el enlace malicioso."</li>
+      </ul>
+      <p data-i18n="section.que_es.ops_intro">Operaciones soportadas:</p>
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="table.operacion">Operación</th>
+            <th data-i18n="table.que_hace">Qué hace</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>security.create_case</code></td>
+            <td data-i18n="op.create_case">Crea un nuevo caso (título, descripción, severidad, TLP, etiquetas) y retorna su identificador</td>
+          </tr>
+          <tr>
+            <td><code>security.add_task</code></td>
+            <td data-i18n="op.add_task">Agrega una tarea de seguimiento a un caso existente</td>
+          </tr>
+          <tr>
+            <td><code>security.update_case_status</code></td>
+            <td data-i18n="op.update_case_status">Actualiza el estado de un caso (New, InProgress, Indeterminate, FalsePositive, TruePositive, Other)</td>
+          </tr>
+          <tr>
+            <td><code>security.add_observable</code></td>
+            <td data-i18n="op.add_observable">Agrega un observable / indicador de compromiso (IP, dominio, hash, correo, URL, etc.) a un caso</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout callout-warning">
+        <span class="callout-title" data-i18n="callout.escribe_title">Este conector escribe datos reales</span>
+        <span data-i18n="callout.escribe_body">Crea y modifica casos, tareas y observables en tu plataforma de gestión de incidentes. No es de solo lectura: confirma con el equipo de seguridad antes de automatizar acciones que no hayan sido solicitadas explícitamente.</span>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="prerrequisitos" data-i18n="section.prerrequisitos">Prerrequisitos</h2>
+      <ul>
+        <li data-i18n="prereq.instancia">Una instancia de <strong>TheHive (API v1)</strong> accesible por red desde la plataforma Ruvic, con una organización ya creada.</li>
+        <li data-i18n="prereq.admin">Acceso administrativo a esa organización en TheHive (para crear un usuario de servicio y asignarle un perfil), solo durante la configuración inicial.</li>
+        <li data-i18n="prereq.red">Acceso de red desde Ruvic al host de TheHive (URL base alcanzable; regla de firewall si aplica).</li>
+        <li data-i18n="prereq.datos">Los datos de conexión que obtendrás en la sección siguiente: URL base y API Key del usuario de servicio.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 id="configuracion-fabricante" data-i18n="section.configuracion_fabricante">Configuración en el fabricante</h2>
+      <p data-i18n="fabricante.intro">Vas a crear un <strong>usuario de servicio dedicado</strong> en TheHive, con un perfil limitado a la gestión de casos. No reutilices la API Key de tu cuenta de administrador: una API Key dedicada permite auditar la actividad del agente y revocarla sin afectar a otros usuarios.</p>
+      <ol class="ruvic-steps">
+        <li>
+          <strong data-i18n="step.1.label">Crea (o identifica) la organización de trabajo en TheHive.</strong>
+          <p data-i18n="step.1.body">Entra a TheHive como administrador y confirma la organización dentro de la cual el agente va a crear casos (por ejemplo, "Security Operations"). Todas las operaciones del conector ocurren dentro de una única organización.</p>
+        </li>
+        <li>
+          <strong data-i18n="step.2.label">Crea un perfil (profile) de mínimo privilegio.</strong>
+          <p data-i18n="step.2.body">En <em>Organisation → Profiles</em>, crea (o reutiliza) un perfil que otorgue únicamente <code>manageCase</code>, <code>manageTask</code> y <code>manageObservable</code>. No incluyas <code>manageOrganisation</code>, <code>manageUser</code> ni <code>manageConfig</code>: el conector no administra la plataforma.</p>
+        </li>
+        <li>
+          <strong data-i18n="step.3.label">Crea el usuario de servicio para Ruvic.</strong>
+          <p data-i18n="step.3.body">En <em>Organisation → Users</em>, crea un usuario dedicado (ej. <code>ruvic-service</code>) y asígnale el perfil de mínimo privilegio del paso anterior dentro de la organización correspondiente.</p>
+        </li>
+        <li>
+          <strong data-i18n="step.4.label">Genera una API Key dedicada.</strong>
+          <p data-i18n="step.4.body">Inicia sesión como ese usuario de servicio (o pide al administrador que la genere en su nombre): icono de usuario → <em>My profile</em> → <em>API Key</em> → <em>Create</em>. Copia la API Key inmediatamente: TheHive no vuelve a mostrarla completa. No uses la API Key de un usuario administrador ni la de tu cuenta personal.</p>
+          <div class="screenshot-placeholder" data-i18n="img.apikey.alt">[ Captura: pantalla "My profile → API Key" en TheHive — reemplazar por assets/img/thehive-apikey.png ]</div>
+        </li>
+        <li>
+          <strong data-i18n="step.5.label">Habilita el acceso de red desde Ruvic.</strong>
+          <p data-i18n="step.5.body">Si tu instancia de TheHive restringe conexiones por IP (habitual en producción), permite la IP de la plataforma Ruvic en el firewall, security group o proxy inverso que protege la instancia.</p>
+        </li>
+        <li>
+          <strong data-i18n="step.6.label">Anota los valores para la siguiente sección.</strong>
+          <p data-i18n="step.6.body">Guarda la URL base de tu instancia (ej. <code>https://thehive.empresa.com</code>) y la API Key generada: los usarás en el formulario de configuración de Ruvic.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h2 id="permisos" data-i18n="section.permisos">Permisos requeridos</h2>
+      <p data-i18n="permisos.intro">Principio de mínimo privilegio: el usuario de servicio solo necesita estos permisos dentro de la organización configurada. No otorgues permisos de administración de la plataforma (gestión de usuarios, organizaciones o configuración global).</p>
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="table.permiso">Permiso</th>
+            <th data-i18n="table.para_que">Para qué lo usa el conector</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>manageCase</code></td>
+            <td data-i18n="permiso.manageCase">Crear casos (<code>security.create_case</code>) y actualizar su estado (<code>security.update_case_status</code>)</td>
+          </tr>
+          <tr>
+            <td><code>manageTask</code></td>
+            <td data-i18n="permiso.manageTask">Agregar tareas de seguimiento a un caso (<code>security.add_task</code>)</td>
+          </tr>
+          <tr>
+            <td><code>manageObservable</code></td>
+            <td data-i18n="permiso.manageObservable">Agregar observables / indicadores de compromiso a un caso (<code>security.add_observable</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout callout-info">
+        <span class="callout-title" data-i18n="callout.sin_admin_title">Sin permisos de administración</span>
+        <span data-i18n="callout.sin_admin_body">El conector nunca necesita <code>manageOrganisation</code>, <code>manageUser</code> ni <code>manageConfig</code>. Si el perfil del usuario de servicio incluye alguno de estos, retíralo.</span>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="configuracion-ruvic" data-i18n="section.configuracion_ruvic">Configuración en Ruvic</h2>
+      <p data-i18n="ruvic.intro">Entra a <strong>Settings → Conectores</strong>, busca la tarjeta <strong>TheHive</strong> y pulsa <strong>Configurar</strong>. Diligencia el formulario con los valores obtenidos en la sección anterior:</p>
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="table.campo">Campo del formulario</th>
+            <th data-i18n="table.valor">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td data-i18n="campo.base_url">URL base de TheHive</td>
+            <td data-i18n="valor.base_url">La URL de tu instancia, sin ruta ni barra final (ej. <code>https://thehive.empresa.com</code>)</td>
+          </tr>
+          <tr>
+            <td data-i18n="campo.api_key">API Key</td>
+            <td data-i18n="valor.api_key">La API Key del usuario de servicio generada en el paso 4. Se guarda cifrada como secreto: la interfaz no volverá a mostrarla completa</td>
+          </tr>
+          <tr>
+            <td data-i18n="campo.timeout">Timeout de conexión (segundos)</td>
+            <td data-i18n="valor.timeout">Opcional; <code>15</code> segundos por defecto</td>
+          </tr>
+        </tbody>
+      </table>
+      <p data-i18n="ruvic.guardar"><span class="ruvic-button">Guardar</span> y luego pulsa <span class="ruvic-button">Probar conexión</span> — la plataforma se conectará a tu instancia de TheHive y confirmará que la API Key y la red funcionan.</p>
+      <div class="screenshot-placeholder" data-i18n="img.formulario.alt">[ Captura: formulario del conector TheHive en Settings → Conectores — reemplazar por assets/img/thehive-form.png ]</div>
+    </section>
+
+    <section>
+      <h2 id="verificacion" data-i18n="section.verificacion">Verificación</h2>
+      <ol class="ruvic-steps">
+        <li>
+          <strong data-i18n="verif.1.label">Test de conexión exitoso.</strong>
+          <p data-i18n="verif.1.body">El botón <em>Probar conexión</em> debe responder: <em>"Conexión exitosa a TheHive (https://tu-instancia)"</em>. La tarjeta del conector cambia a estado <strong>Configurado</strong>.</p>
+        </li>
+        <li>
+          <strong data-i18n="verif.2.label">Prueba mínima con el agente.</strong>
+          <p data-i18n="verif.2.body">Abre una conversación nueva con el agente y pídele, en un entorno de pruebas:</p>
+          <blockquote data-i18n="verif.2.prompt">"Crea un caso de prueba en TheHive titulado 'Prueba de conector Ruvic', severidad baja, y confírmame el id que devuelve."</blockquote>
+          <p data-i18n="verif.2.result">El agente debe confirmar el <code>_id</code> del caso creado. Verifícalo también en la interfaz web de TheHive. Si aparece, el conector quedó operativo de punta a punta.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h2 id="solucion-problemas" data-i18n="section.solucion_problemas">Solución de problemas</h2>
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="table.mensaje">Mensaje / síntoma</th>
+            <th data-i18n="table.causa">Causa probable y solución</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td data-i18n="problema.auth.msg">"Autenticación fallida: Credenciales inválidas o sin permiso suficiente para esta operación"</td>
+            <td data-i18n="problema.auth.fix">La API Key es incorrecta, fue revocada, o el usuario de servicio no tiene el perfil con <code>manageCase</code>/<code>manageTask</code>/<code>manageObservable</code>. Genera una nueva API Key (paso 4 de la sección de fabricante) y vuelve a guardar el formulario.</td>
+          </tr>
+          <tr>
+            <td data-i18n="problema.red.msg">"Error de red: No se pudo alcanzar TheHive en '...'"</td>
+            <td data-i18n="problema.red.fix">La plataforma Ruvic no alcanza la URL base configurada. Revisa que la URL no tenga errores de escritura, que no sea <code>localhost</code> (debe ser accesible desde Ruvic) y que el firewall permita la IP de Ruvic. Aumenta el timeout si la instancia responde lento.</td>
+          </tr>
+          <tr>
+            <td data-i18n="problema.permiso.msg">El agente crea el caso pero falla al agregar tareas u observables ("403")</td>
+            <td data-i18n="problema.permiso.fix">El perfil del usuario de servicio no incluye <code>manageTask</code> o <code>manageObservable</code>, o el usuario pertenece a otra organización. Revisa el perfil asignado en <em>Organisation → Users</em> y ajústalo (paso 2 y 3 de la sección de fabricante).</td>
+          </tr>
+          <tr>
+            <td data-i18n="problema.datos.msg">"Error de datos: status '...' inválido. Valores permitidos: [...]"</td>
+            <td data-i18n="problema.datos.fix">Se intentó actualizar un caso a un estado no soportado por TheHive. Los valores válidos son <code>New</code>, <code>InProgress</code>, <code>Indeterminate</code>, <code>FalsePositive</code>, <code>TruePositive</code> y <code>Other</code> (sensible a mayúsculas).</td>
+          </tr>
+          <tr>
+            <td data-i18n="problema.sinconfig.msg">El conector aparece "Sin configurar" tras guardar</td>
+            <td data-i18n="problema.sinconfig.fix">La URL base o la API Key quedaron vacías (son obligatorias). Ábrelo de nuevo y completa ambos campos; el timeout es opcional.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2 id="faq-seguridad" data-i18n="section.faq_seguridad">Preguntas frecuentes y notas de seguridad</h2>
+
+      <h3 data-i18n="faq.q1">¿Puede el agente borrar casos o hacer cambios masivos?</h3>
+      <p data-i18n="faq.a1">No. El conector solo expone crear un caso, agregar una tarea, actualizar el estado de un caso y agregar un observable. No incluye operaciones de borrado ni de administración de la organización, ni aunque el perfil de TheHive lo permitiera.</p>
+
+      <h3 data-i18n="faq.q2">¿Dónde queda guardada la API Key?</h3>
+      <p data-i18n="faq.a2">Como secreto en el almacén de credenciales de la plataforma Ruvic, asociado a tu organización. La interfaz nunca vuelve a mostrarla completa; solo indica "definida". Para cambiarla, escribe una nueva en el formulario; para conservarla al editar otros campos, deja el campo vacío.</p>
+
+      <h3 data-i18n="faq.q3">Rotación de la API Key</h3>
+      <p data-i18n="faq.a3">Recomendado cada 90 días o según tu política de seguridad: genera una nueva API Key desde el perfil del usuario de servicio en TheHive, actualízala en el formulario del conector y pulsa <em>Probar conexión</em>. Revoca la API Key anterior una vez confirmada la nueva.</p>
+
+      <h3 data-i18n="faq.q4">¿Qué hago si la API Key se compromete?</h3>
+      <ol>
+        <li data-i18n="faq.a4.1">Revoca la API Key de inmediato desde el perfil del usuario de servicio en TheHive ("My profile → API Key → Revoke").</li>
+        <li data-i18n="faq.a4.2">Revisa el registro de auditoría / logs de TheHive para identificar actividad del usuario de servicio en el periodo comprometido.</li>
+        <li data-i18n="faq.a4.3">Genera una nueva API Key y actualízala en el formulario del conector en Ruvic.</li>
+      </ol>
+
+      <h3 data-i18n="faq.q5">¿El usuario de servicio necesita ser administrador de TheHive?</h3>
+      <p data-i18n="faq.a5">No, y no debería serlo. Basta con un perfil acotado a <code>manageCase</code>, <code>manageTask</code> y <code>manageObservable</code> dentro de la organización de trabajo. Otorgar permisos de administración viola el principio de mínimo privilegio y amplía innecesariamente el impacto si la API Key se filtra.</p>
+
+      <div class="callout callout-warning">
+        <span class="callout-title" data-i18n="callout.buenas_practicas_title">Buenas prácticas</span>
+        <span data-i18n="callout.buenas_practicas_body">Usa siempre un usuario de servicio dedicado y un perfil de mínimo privilegio; restringe el acceso de red por IP cuando sea posible; no compartas la API Key por canales no seguros; y confirma con el equipo de seguridad antes de automatizar la creación o el cierre masivo de casos.</span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const I18N = {
+      es: {
+        doc_title: "Conector TheHive — Ruvic",
+        toc_title: "Contenido",
+        "toc.que_es": "¿Qué es y para qué sirve?",
+        "toc.prerrequisitos": "Prerrequisitos",
+        "toc.configuracion_fabricante": "Configuración en el fabricante",
+        "toc.permisos": "Permisos requeridos",
+        "toc.configuracion_ruvic": "Configuración en Ruvic",
+        "toc.verificacion": "Verificación",
+        "toc.solucion_problemas": "Solución de problemas",
+        "toc.faq_seguridad": "Preguntas frecuentes y notas de seguridad",
+        guide_title: "Conector TheHive",
+        "section.que_es": "¿Qué es y para qué sirve?",
+        "section.que_es.body": "El conector TheHive permite que el agente de Ruvic gestione casos e incidentes de seguridad directamente en tu instancia de TheHive (API v1). A diferencia de los conectores de solo consulta, este conector escribe: crea casos, agrega tareas, actualiza estados y agrega observables (IOC) reales. Una vez configurado, puedes pedirle al agente cosas como:",
+        "section.que_es.example1": "\"Crea un caso de phishing reportado por finanzas y agrégale una tarea para analizar las cabeceras del correo.\"",
+        "section.que_es.example2": "\"Marca el caso ~12345 como InProgress y agrega la IP 45.33.22.11 como observable.\"",
+        "section.que_es.example3": "\"Actualiza a TruePositive el caso que abrimos ayer sobre el enlace malicioso.\"",
+        "section.que_es.ops_intro": "Operaciones soportadas:",
+        "table.operacion": "Operación",
+        "table.que_hace": "Qué hace",
+        "op.create_case": "Crea un nuevo caso (título, descripción, severidad, TLP, etiquetas) y retorna su identificador",
+        "op.add_task": "Agrega una tarea de seguimiento a un caso existente",
+        "op.update_case_status": "Actualiza el estado de un caso (New, InProgress, Indeterminate, FalsePositive, TruePositive, Other)",
+        "op.add_observable": "Agrega un observable / indicador de compromiso (IP, dominio, hash, correo, URL, etc.) a un caso",
+        "callout.escribe_title": "Este conector escribe datos reales",
+        "callout.escribe_body": "Crea y modifica casos, tareas y observables en tu plataforma de gestión de incidentes. No es de solo lectura: confirma con el equipo de seguridad antes de automatizar acciones que no hayan sido solicitadas explícitamente.",
+        "section.prerrequisitos": "Prerrequisitos",
+        "prereq.instancia": "Una instancia de <strong>TheHive (API v1)</strong> accesible por red desde la plataforma Ruvic, con una organización ya creada.",
+        "prereq.admin": "Acceso administrativo a esa organización en TheHive (para crear un usuario de servicio y asignarle un perfil), solo durante la configuración inicial.",
+        "prereq.red": "Acceso de red desde Ruvic al host de TheHive (URL base alcanzable; regla de firewall si aplica).",
+        "prereq.datos": "Los datos de conexión que obtendrás en la sección siguiente: URL base y API Key del usuario de servicio.",
+        "section.configuracion_fabricante": "Configuración en el fabricante",
+        "fabricante.intro": "Vas a crear un <strong>usuario de servicio dedicado</strong> en TheHive, con un perfil limitado a la gestión de casos. No reutilices la API Key de tu cuenta de administrador: una API Key dedicada permite auditar la actividad del agente y revocarla sin afectar a otros usuarios.",
+        "step.1.label": "Crea (o identifica) la organización de trabajo en TheHive.",
+        "step.1.body": "Entra a TheHive como administrador y confirma la organización dentro de la cual el agente va a crear casos (por ejemplo, \"Security Operations\"). Todas las operaciones del conector ocurren dentro de una única organización.",
+        "step.2.label": "Crea un perfil (profile) de mínimo privilegio.",
+        "step.2.body": "En <em>Organisation → Profiles</em>, crea (o reutiliza) un perfil que otorgue únicamente <code>manageCase</code>, <code>manageTask</code> y <code>manageObservable</code>. No incluyas <code>manageOrganisation</code>, <code>manageUser</code> ni <code>manageConfig</code>: el conector no administra la plataforma.",
+        "step.3.label": "Crea el usuario de servicio para Ruvic.",
+        "step.3.body": "En <em>Organisation → Users</em>, crea un usuario dedicado (ej. <code>ruvic-service</code>) y asígnale el perfil de mínimo privilegio del paso anterior dentro de la organización correspondiente.",
+        "step.4.label": "Genera una API Key dedicada.",
+        "step.4.body": "Inicia sesión como ese usuario de servicio (o pide al administrador que la genere en su nombre): icono de usuario → <em>My profile</em> → <em>API Key</em> → <em>Create</em>. Copia la API Key inmediatamente: TheHive no vuelve a mostrarla completa. No uses la API Key de un usuario administrador ni la de tu cuenta personal.",
+        "img.apikey.alt": "[ Captura: pantalla \"My profile → API Key\" en TheHive — reemplazar por assets/img/thehive-apikey.png ]",
+        "step.5.label": "Habilita el acceso de red desde Ruvic.",
+        "step.5.body": "Si tu instancia de TheHive restringe conexiones por IP (habitual en producción), permite la IP de la plataforma Ruvic en el firewall, security group o proxy inverso que protege la instancia.",
+        "step.6.label": "Anota los valores para la siguiente sección.",
+        "step.6.body": "Guarda la URL base de tu instancia (ej. <code>https://thehive.empresa.com</code>) y la API Key generada: los usarás en el formulario de configuración de Ruvic.",
+        "section.permisos": "Permisos requeridos",
+        "permisos.intro": "Principio de mínimo privilegio: el usuario de servicio solo necesita estos permisos dentro de la organización configurada. No otorgues permisos de administración de la plataforma (gestión de usuarios, organizaciones o configuración global).",
+        "table.permiso": "Permiso",
+        "table.para_que": "Para qué lo usa el conector",
+        "permiso.manageCase": "Crear casos (<code>security.create_case</code>) y actualizar su estado (<code>security.update_case_status</code>)",
+        "permiso.manageTask": "Agregar tareas de seguimiento a un caso (<code>security.add_task</code>)",
+        "permiso.manageObservable": "Agregar observables / indicadores de compromiso a un caso (<code>security.add_observable</code>)",
+        "callout.sin_admin_title": "Sin permisos de administración",
+        "callout.sin_admin_body": "El conector nunca necesita <code>manageOrganisation</code>, <code>manageUser</code> ni <code>manageConfig</code>. Si el perfil del usuario de servicio incluye alguno de estos, retíralo.",
+        "section.configuracion_ruvic": "Configuración en Ruvic",
+        "ruvic.intro": "Entra a <strong>Settings → Conectores</strong>, busca la tarjeta <strong>TheHive</strong> y pulsa <strong>Configurar</strong>. Diligencia el formulario con los valores obtenidos en la sección anterior:",
+        "table.campo": "Campo del formulario",
+        "table.valor": "Valor",
+        "campo.base_url": "URL base de TheHive",
+        "valor.base_url": "La URL de tu instancia, sin ruta ni barra final (ej. <code>https://thehive.empresa.com</code>)",
+        "campo.api_key": "API Key",
+        "valor.api_key": "La API Key del usuario de servicio generada en el paso 4. Se guarda cifrada como secreto: la interfaz no volverá a mostrarla completa",
+        "campo.timeout": "Timeout de conexión (segundos)",
+        "valor.timeout": "Opcional; <code>15</code> segundos por defecto",
+        "ruvic.guardar": "<span class=\"ruvic-button\">Guardar</span> y luego pulsa <span class=\"ruvic-button\">Probar conexión</span> — la plataforma se conectará a tu instancia de TheHive y confirmará que la API Key y la red funcionan.",
+        "img.formulario.alt": "[ Captura: formulario del conector TheHive en Settings → Conectores — reemplazar por assets/img/thehive-form.png ]",
+        "section.verificacion": "Verificación",
+        "verif.1.label": "Test de conexión exitoso.",
+        "verif.1.body": "El botón <em>Probar conexión</em> debe responder: <em>\"Conexión exitosa a TheHive (https://tu-instancia)\"</em>. La tarjeta del conector cambia a estado <strong>Configurado</strong>.",
+        "verif.2.label": "Prueba mínima con el agente.",
+        "verif.2.body": "Abre una conversación nueva con el agente y pídele, en un entorno de pruebas:",
+        "verif.2.prompt": "\"Crea un caso de prueba en TheHive titulado 'Prueba de conector Ruvic', severidad baja, y confírmame el id que devuelve.\"",
+        "verif.2.result": "El agente debe confirmar el <code>_id</code> del caso creado. Verifícalo también en la interfaz web de TheHive. Si aparece, el conector quedó operativo de punta a punta.",
+        "section.solucion_problemas": "Solución de problemas",
+        "table.mensaje": "Mensaje / síntoma",
+        "table.causa": "Causa probable y solución",
+        "problema.auth.msg": "\"Autenticación fallida: Credenciales inválidas o sin permiso suficiente para esta operación\"",
+        "problema.auth.fix": "La API Key es incorrecta, fue revocada, o el usuario de servicio no tiene el perfil con <code>manageCase</code>/<code>manageTask</code>/<code>manageObservable</code>. Genera una nueva API Key (paso 4 de la sección de fabricante) y vuelve a guardar el formulario.",
+        "problema.red.msg": "\"Error de red: No se pudo alcanzar TheHive en '...'\"",
+        "problema.red.fix": "La plataforma Ruvic no alcanza la URL base configurada. Revisa que la URL no tenga errores de escritura, que no sea <code>localhost</code> (debe ser accesible desde Ruvic) y que el firewall permita la IP de Ruvic. Aumenta el timeout si la instancia responde lento.",
+        "problema.permiso.msg": "El agente crea el caso pero falla al agregar tareas u observables (\"403\")",
+        "problema.permiso.fix": "El perfil del usuario de servicio no incluye <code>manageTask</code> o <code>manageObservable</code>, o el usuario pertenece a otra organización. Revisa el perfil asignado en <em>Organisation → Users</em> y ajústalo (paso 2 y 3 de la sección de fabricante).",
+        "problema.datos.msg": "\"Error de datos: status '...' inválido. Valores permitidos: [...]\"",
+        "problema.datos.fix": "Se intentó actualizar un caso a un estado no soportado por TheHive. Los valores válidos son <code>New</code>, <code>InProgress</code>, <code>Indeterminate</code>, <code>FalsePositive</code>, <code>TruePositive</code> y <code>Other</code> (sensible a mayúsculas).",
+        "problema.sinconfig.msg": "El conector aparece \"Sin configurar\" tras guardar",
+        "problema.sinconfig.fix": "La URL base o la API Key quedaron vacías (son obligatorias). Ábrelo de nuevo y completa ambos campos; el timeout es opcional.",
+        "section.faq_seguridad": "Preguntas frecuentes y notas de seguridad",
+        "faq.q1": "¿Puede el agente borrar casos o hacer cambios masivos?",
+        "faq.a1": "No. El conector solo expone crear un caso, agregar una tarea, actualizar el estado de un caso y agregar un observable. No incluye operaciones de borrado ni de administración de la organización, ni aunque el perfil de TheHive lo permitiera.",
+        "faq.q2": "¿Dónde queda guardada la API Key?",
+        "faq.a2": "Como secreto en el almacén de credenciales de la plataforma Ruvic, asociado a tu organización. La interfaz nunca vuelve a mostrarla completa; solo indica \"definida\". Para cambiarla, escribe una nueva en el formulario; para conservarla al editar otros campos, deja el campo vacío.",
+        "faq.q3": "Rotación de la API Key",
+        "faq.a3": "Recomendado cada 90 días o según tu política de seguridad: genera una nueva API Key desde el perfil del usuario de servicio en TheHive, actualízala en el formulario del conector y pulsa <em>Probar conexión</em>. Revoca la API Key anterior una vez confirmada la nueva.",
+        "faq.q4": "¿Qué hago si la API Key se compromete?",
+        "faq.a4.1": "Revoca la API Key de inmediato desde el perfil del usuario de servicio en TheHive (\"My profile → API Key → Revoke\").",
+        "faq.a4.2": "Revisa el registro de auditoría / logs de TheHive para identificar actividad del usuario de servicio en el periodo comprometido.",
+        "faq.a4.3": "Genera una nueva API Key y actualízala en el formulario del conector en Ruvic.",
+        "faq.q5": "¿El usuario de servicio necesita ser administrador de TheHive?",
+        "faq.a5": "No, y no debería serlo. Basta con un perfil acotado a <code>manageCase</code>, <code>manageTask</code> y <code>manageObservable</code> dentro de la organización de trabajo. Otorgar permisos de administración viola el principio de mínimo privilegio y amplía innecesariamente el impacto si la API Key se filtra.",
+        "callout.buenas_practicas_title": "Buenas prácticas",
+        "callout.buenas_practicas_body": "Usa siempre un usuario de servicio dedicado y un perfil de mínimo privilegio; restringe el acceso de red por IP cuando sea posible; no compartas la API Key por canales no seguros; y confirma con el equipo de seguridad antes de automatizar la creación o el cierre masivo de casos.",
+      },
+      en: {
+        doc_title: "TheHive Connector — Ruvic",
+        toc_title: "Contents",
+        "toc.que_es": "What it is and what it's for",
+        "toc.prerrequisitos": "Prerequisites",
+        "toc.configuracion_fabricante": "Vendor / provider setup",
+        "toc.permisos": "Required permissions",
+        "toc.configuracion_ruvic": "Configuration in Ruvic",
+        "toc.verificacion": "Verification",
+        "toc.solucion_problemas": "Troubleshooting",
+        "toc.faq_seguridad": "FAQ and security notes",
+        guide_title: "TheHive Connector",
+        "section.que_es": "What it is and what it's for",
+        "section.que_es.body": "The TheHive connector lets the Ruvic agent manage security cases and incidents directly in your TheHive instance (API v1). Unlike read-only connectors, this one writes: it creates real cases, adds tasks, updates statuses and adds observables (IOCs). Once configured, you can ask the agent things like:",
+        "section.que_es.example1": "\"Create a phishing case reported by finance and add a task to analyze the email headers.\"",
+        "section.que_es.example2": "\"Mark case ~12345 as InProgress and add IP 45.33.22.11 as an observable.\"",
+        "section.que_es.example3": "\"Update to TruePositive the case we opened yesterday about the malicious link.\"",
+        "section.que_es.ops_intro": "Supported operations:",
+        "table.operacion": "Operation",
+        "table.que_hace": "What it does",
+        "op.create_case": "Creates a new case (title, description, severity, TLP, tags) and returns its identifier",
+        "op.add_task": "Adds a follow-up task to an existing case",
+        "op.update_case_status": "Updates a case's status (New, InProgress, Indeterminate, FalsePositive, TruePositive, Other)",
+        "op.add_observable": "Adds an observable / indicator of compromise (IP, domain, hash, email, URL, etc.) to a case",
+        "callout.escribe_title": "This connector writes real data",
+        "callout.escribe_body": "It creates and modifies cases, tasks and observables in your incident management platform. It is not read-only: confirm with the security team before automating actions that were not explicitly requested.",
+        "section.prerrequisitos": "Prerequisites",
+        "prereq.instancia": "A <strong>TheHive (API v1)</strong> instance reachable over the network from the Ruvic platform, with an organisation already created.",
+        "prereq.admin": "Administrative access to that organisation in TheHive (to create a service user and assign a profile), only during initial setup.",
+        "prereq.red": "Network access from Ruvic to the TheHive host (reachable base URL; firewall rule if applicable).",
+        "prereq.datos": "The connection details you will obtain in the next section: base URL and API Key of the service user.",
+        "section.configuracion_fabricante": "Vendor / provider setup",
+        "fabricante.intro": "You will create a <strong>dedicated service user</strong> in TheHive, with a profile limited to case management. Do not reuse your administrator account's API Key: a dedicated API Key lets you audit the agent's activity and revoke it without affecting other users.",
+        "step.1.label": "Create (or identify) the working organisation in TheHive.",
+        "step.1.body": "Log into TheHive as an administrator and confirm the organisation within which the agent will create cases (e.g. \"Security Operations\"). All connector operations happen within a single organisation.",
+        "step.2.label": "Create a least-privilege profile.",
+        "step.2.body": "Under <em>Organisation → Profiles</em>, create (or reuse) a profile that grants only <code>manageCase</code>, <code>manageTask</code> and <code>manageObservable</code>. Do not include <code>manageOrganisation</code>, <code>manageUser</code> or <code>manageConfig</code>: the connector does not administer the platform.",
+        "step.3.label": "Create the service user for Ruvic.",
+        "step.3.body": "Under <em>Organisation → Users</em>, create a dedicated user (e.g. <code>ruvic-service</code>) and assign it the least-privilege profile from the previous step within the corresponding organisation.",
+        "step.4.label": "Generate a dedicated API Key.",
+        "step.4.body": "Log in as that service user (or ask an administrator to generate it on its behalf): user icon → <em>My profile</em> → <em>API Key</em> → <em>Create</em>. Copy the API Key immediately: TheHive will not show it again in full. Do not use an administrator's or your personal account's API Key.",
+        "img.apikey.alt": "[ Screenshot: \"My profile → API Key\" screen in TheHive — replace with assets/img/thehive-apikey.png ]",
+        "step.5.label": "Enable network access from Ruvic.",
+        "step.5.body": "If your TheHive instance restricts connections by IP (common in production), allow the Ruvic platform IP in the firewall, security group or reverse proxy protecting the instance.",
+        "step.6.label": "Write down the values for the next section.",
+        "step.6.body": "Save your instance's base URL (e.g. <code>https://thehive.company.com</code>) and the generated API Key: you will use them in the Ruvic configuration form.",
+        "section.permisos": "Required permissions",
+        "permisos.intro": "Least-privilege principle: the service user only needs these permissions within the configured organisation. Do not grant platform administration permissions (user, organisation or global configuration management).",
+        "table.permiso": "Permission",
+        "table.para_que": "Why the connector needs it",
+        "permiso.manageCase": "Create cases (<code>security.create_case</code>) and update their status (<code>security.update_case_status</code>)",
+        "permiso.manageTask": "Add follow-up tasks to a case (<code>security.add_task</code>)",
+        "permiso.manageObservable": "Add observables / indicators of compromise to a case (<code>security.add_observable</code>)",
+        "callout.sin_admin_title": "No administration permissions",
+        "callout.sin_admin_body": "The connector never needs <code>manageOrganisation</code>, <code>manageUser</code> or <code>manageConfig</code>. If the service user's profile includes any of these, remove them.",
+        "section.configuracion_ruvic": "Configuration in Ruvic",
+        "ruvic.intro": "Go to <strong>Settings → Connectors</strong>, find the <strong>TheHive</strong> card and click <strong>Configure</strong>. Fill in the form with the values from the previous section:",
+        "table.campo": "Form field",
+        "table.valor": "Value",
+        "campo.base_url": "TheHive base URL",
+        "valor.base_url": "Your instance's URL, without a path or trailing slash (e.g. <code>https://thehive.company.com</code>)",
+        "campo.api_key": "API Key",
+        "valor.api_key": "The service user's API Key generated in step 4. Stored encrypted as a secret: the UI will never display it in full again",
+        "campo.timeout": "Connection timeout (seconds)",
+        "valor.timeout": "Optional; defaults to <code>15</code> seconds",
+        "ruvic.guardar": "<span class=\"ruvic-button\">Save</span> and then click <span class=\"ruvic-button\">Test connection</span> — the platform will connect to your TheHive instance and confirm the API Key and networking work.",
+        "img.formulario.alt": "[ Screenshot: TheHive connector form in Settings → Connectors — replace with assets/img/thehive-form.png ]",
+        "section.verificacion": "Verification",
+        "verif.1.label": "Successful connection test.",
+        "verif.1.body": "The <em>Test connection</em> button should return: <em>\"Conexión exitosa a TheHive (https://your-instance)\"</em>. The connector card switches to <strong>Configured</strong>.",
+        "verif.2.label": "Minimal test with the agent.",
+        "verif.2.body": "Open a new conversation with the agent and ask it, in a test environment:",
+        "verif.2.prompt": "\"Create a test case in TheHive titled 'Ruvic connector test', low severity, and confirm the id it returns.\"",
+        "verif.2.result": "The agent should confirm the <code>_id</code> of the created case. Verify it in the TheHive web interface too. If it appears, the connector is fully operational.",
+        "section.solucion_problemas": "Troubleshooting",
+        "table.mensaje": "Message / symptom",
+        "table.causa": "Likely cause and fix",
+        "problema.auth.msg": "\"Authentication failed: Invalid credentials or insufficient permission for this operation\"",
+        "problema.auth.fix": "The API Key is wrong, was revoked, or the service user's profile lacks <code>manageCase</code>/<code>manageTask</code>/<code>manageObservable</code>. Generate a new API Key (step 4 of the vendor setup section) and re-save the form.",
+        "problema.red.msg": "\"Network error: Could not reach TheHive at '...'\"",
+        "problema.red.fix": "The Ruvic platform cannot reach the configured base URL. Check the URL for typos, make sure it is not <code>localhost</code> (it must be reachable from Ruvic), and confirm the firewall allows the Ruvic IP. Increase the timeout if the instance responds slowly.",
+        "problema.permiso.msg": "The agent creates the case but fails to add tasks or observables (\"403\")",
+        "problema.permiso.fix": "The service user's profile is missing <code>manageTask</code> or <code>manageObservable</code>, or the user belongs to a different organisation. Check the profile assigned under <em>Organisation → Users</em> and adjust it (steps 2 and 3 of the vendor setup section).",
+        "problema.datos.msg": "\"Data error: status '...' is invalid. Allowed values: [...]\"",
+        "problema.datos.fix": "An attempt was made to update a case to a status TheHive does not support. Valid values are <code>New</code>, <code>InProgress</code>, <code>Indeterminate</code>, <code>FalsePositive</code>, <code>TruePositive</code> and <code>Other</code> (case-sensitive).",
+        "problema.sinconfig.msg": "The connector shows \"Not configured\" after saving",
+        "problema.sinconfig.fix": "The base URL or API Key was left empty (both are required). Open it again and fill in both fields; the timeout is optional.",
+        "section.faq_seguridad": "FAQ and security notes",
+        "faq.q1": "Can the agent delete cases or make bulk changes?",
+        "faq.a1": "No. The connector only exposes creating a case, adding a task, updating a case's status and adding an observable. It includes no delete or organisation-administration operations, even if the TheHive profile allowed it.",
+        "faq.q2": "Where is the API Key stored?",
+        "faq.a2": "As a secret in the Ruvic platform's credential store, tied to your organisation. The UI never displays it in full again; it only shows \"set\". To change it, type a new one in the form; to keep it while editing other fields, leave the field empty.",
+        "faq.q3": "API Key rotation",
+        "faq.a3": "Recommended every 90 days or per your security policy: generate a new API Key from the service user's profile in TheHive, update it in the connector form and click <em>Test connection</em>. Revoke the previous API Key once the new one is confirmed working.",
+        "faq.q4": "What if the API Key is compromised?",
+        "faq.a4.1": "Revoke the API Key immediately from the service user's profile in TheHive (\"My profile → API Key → Revoke\").",
+        "faq.a4.2": "Review TheHive's audit log / logs to identify the service user's activity during the compromised period.",
+        "faq.a4.3": "Generate a new API Key and update it in the connector form in Ruvic.",
+        "faq.q5": "Does the service user need to be a TheHive administrator?",
+        "faq.a5": "No, and it shouldn't be. A profile scoped to <code>manageCase</code>, <code>manageTask</code> and <code>manageObservable</code> within the working organisation is enough. Granting administration permissions violates the least-privilege principle and unnecessarily widens the blast radius if the API Key leaks.",
+        "callout.buenas_practicas_title": "Best practices",
+        "callout.buenas_practicas_body": "Always use a dedicated service user with a least-privilege profile; restrict network access by IP where possible; never share the API Key over insecure channels; and confirm with the security team before automating bulk case creation or closure.",
+      },
+    };
+    /* El portal aplica el idioma del usuario (localStorage ruvic-docs-lang)
+       y actualiza [data-i18n], [data-i18n-placeholder] y [data-i18n-alt]. */
+  </script>
+</body>
+</html>
