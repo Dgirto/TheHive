@@ -1,0 +1,54 @@
+{
+  "id": "thehive",
+  "name": "TheHive",
+  "name_en": "TheHive",
+  "version": "1.0.0",
+  "description": "Gestión de casos e incidentes de seguridad en TheHive: crear caso, agregar tarea, actualizar estado y agregar observable",
+  "description_en": "Security case and incident management in TheHive: create a case, add a task, update status and add an observable",
+  "icon": "icon.svg",
+  "category": "security",
+  "category_en": "security",
+  "keywords": ["thehive", "ciberseguridad", "cybersecurity", "incidentes", "incident response", "soar", "casos", "observables", "ioc"],
+  "library": {
+    "package": "ruvic-thehive-connector",
+    "install": "pip install git+https://github.com/Dgirto/TheHive.git#subdirectory=lib",
+    "import_name": "ruvic_thehive_connector"
+  },
+  "auth_modes": [
+    {
+      "id": "api_key",
+      "label": "API Key",
+      "fields": [
+        {
+          "key": "base_url",
+          "label": "URL base de TheHive",
+          "type": "text",
+          "required": true,
+          "placeholder": "https://thehive.empresa.com"
+        },
+        {
+          "key": "api_key",
+          "label": "API Key",
+          "type": "password",
+          "secret": true,
+          "required": true,
+          "help_text": "Genera una API Key dedicada en el perfil del usuario de servicio dentro de TheHive"
+        },
+        {
+          "key": "connect_timeout",
+          "label": "Timeout de conexión (segundos)",
+          "type": "number",
+          "required": false,
+          "default": "15"
+        }
+      ]
+    }
+  ],
+  "env_prefix": "RUVIC_THEHIVE_",
+  "operations": ["security.create_case", "security.add_task", "security.update_case_status", "security.add_observable"],
+  "test_connection": true,
+  "docs": {
+    "skill": "SKILL.md",
+    "permissions_note": "El usuario de servicio necesita el perfil/rol con permisos manageCase, manageTask y manageObservable dentro de la organización configurada en TheHive. No se requieren permisos de administración de la plataforma (gestión de usuarios, organizaciones, configuración global)."
+  }
+}
