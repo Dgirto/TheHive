@@ -183,7 +183,11 @@ class TheHiveClient:
             raise TheHiveDataError(
                 f"status {status!r} inválido. Valores permitidos: {sorted(_VALID_STATUSES)}"
             )
-        result = self._request("PATCH", f"/api/v1/case/{case_id}", json={"status": status})
+        # TheHive responde 204 No Content al PATCH (sin cuerpo), así que
+        # se hace un GET de seguimiento para devolver el caso actualizado
+        # tal como promete la firma de esta función.
+        self._request("PATCH", f"/api/v1/case/{case_id}", json={"status": status})
+        result = self._request("GET", f"/api/v1/case/{case_id}")
         self._logger.info("Caso %s actualizado a estado %s", case_id, status)
         return result
 
@@ -222,5 +226,13 @@ class TheHiveClient:
             raise TheHiveDataError("case_id, data_type y data no pueden estar vacíos.")
         body = {"dataType": data_type, "data": data, "message": message or "", "ioc": ioc}
         result = self._request("POST", f"/api/v1/case/{case_id}/observable", json=body)
+        # TheHive siempre responde con una lista (su API permite crear
+        # varios observables de una vez con valores separados por coma),
+        # aunque acá solo se envía un valor. Se toma el primer elemento
+        # para cumplir la firma documentada (dict, no lista).
+        if isinstance(result, list):
+            if not result:
+                raise TheHiveDataError("TheHive no devolvió ningún observable creado.")
+            result = result[0]
         self._logger.info('Observable agregado a caso %s: %s="%s"', case_id, data_type, data)
         return result
