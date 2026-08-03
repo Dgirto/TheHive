@@ -22,7 +22,7 @@ class TheHiveConfig:
     connect_timeout: int = 15
 
     @classmethod
-    def from_env(cls) -> "TheHiveConfig":
+    def from_env(cls) -> TheHiveConfig:
         """Construye la configuración desde las variables RUVIC_THEHIVE_*.
 
         Raises:
